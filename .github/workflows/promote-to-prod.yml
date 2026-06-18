@@ -1,0 +1,69 @@
+name: Promote to Prod
+
+# Approver만 수동 트리거 가능
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "배포할 이미지 태그 (git sha 7자리, 예: abc1234)"
+        required: true
+        type: string
+      reason:
+        description: "배포 이유 (감사 로그 기록용)"
+        required: true
+        type: string
+
+jobs:
+  promote:
+    name: Promote to Production
+    runs-on: ubuntu-latest
+    # GitHub Environment "production"에 Approver 보호 규칙 필요
+    # Settings → Environments → production → Required reviewers
+    environment: production
+    steps:
+      - name: Checkout manifest-repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.MANIFEST_REPO }}
+          token: ${{ secrets.MANIFEST_REPO_TOKEN }}
+          path: manifest-repo
+
+      - name: Update prod overlay image tag
+        env:
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          kimtaejung: ${{ secrets.kimtaejung }}
+        run: |
+          KUSTOMIZATION="manifest-repo/overlays/prod/kustomization.yaml"
+          sed -i "s|newName:.*gitops-demo-app.*|newName: ${kimtaejung}/gitops-demo-app|" "$KUSTOMIZATION"
+          sed -i "s|newTag:.*|newTag: ${IMAGE_TAG}|" "$KUSTOMIZATION"
+          echo "Updated prod to ${kimtaejung}/gitops-demo-app:${IMAGE_TAG}"
+
+      - name: Create PR (prod release)
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.MANIFEST_REPO_TOKEN }}
+          path: manifest-repo
+          branch: "release/prod-${{ github.event.inputs.image_tag }}"
+          base: main
+          title: "[prod] RELEASE: ${{ github.event.inputs.image_tag }}"
+          body: |
+            ## Production Release
+
+            | 항목 | 값 |
+            |---|---|
+            | **Image Tag** | `${{ github.event.inputs.image_tag }}` |
+            | **Reason** | ${{ github.event.inputs.reason }} |
+            | **Triggered by** | @${{ github.actor }} |
+            | **Workflow** | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+            ## 배포 전 체크리스트
+            - [ ] qa 환경 검증 완료
+            - [ ] 롤백 이미지 태그 확인
+            - [ ] Approver 최종 승인
+
+            > **주의**: 이 PR merge 후 ArgoCD UI에서 **수동 SYNC**를 눌러야 prod에 배포됩니다.
+            > `gitops-demo-prod` → SYNC 버튼
+          labels: |
+            production-release
+            requires-approval
+          commit-message: "chore: promote ${{ github.event.inputs.image_tag }} to prod"

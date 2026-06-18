@@ -1,0 +1,13 @@
+# CODEOWNERS — gitops-app
+# GitHub이 PR 생성 시 아래 규칙에 따라 자동으로 리뷰어를 지정합니다.
+# [HUMAN] @centerkimdudu, @centerkimdudu, @DEV_LEAD_ID 를 실제 GitHub ID로 교체하세요.
+
+# 기본: 모든 변경에 Approver 리뷰 필요
+*                           @centerkimdudu
+
+# CI/CD 워크플로우: Approver + Dev Lead만 수정 가능
+.github/workflows/          @centerkimdudu @DEV_LEAD_ID
+
+# 보안 파일: Approver 단독 승인
+SECURITY.md                 @centerkimdudu
+CODEOWNERS                  @centerkimdudu
